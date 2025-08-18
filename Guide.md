@@ -1,4 +1,5 @@
-**Version:** Wazuh 4.9.x + Elasticsearch 8.x + Kibana 8.x + Logstash 8.x  
+
+***Version:** Wazuh 4.12.0 + Elasticsearch 9.1.2 + Kibana 9.1.2 + Logstash 9.1.2  
 **Last Updated:** December 2024  
 **Target OS:** Debian 12 (Bookworm)
 
@@ -85,7 +86,7 @@ sudo sed -i '/ swap / s/^/#/' /etc/fstab
 
 ---
 
-## Part 1: Install and Configure Elasticsearch 8.x
+## Part 1: Install and Configure Elasticsearch 9.x
 
 **Important Note:** Elasticsearch 8.x automatically configures security during installation, including generating TLS certificates, enabling authentication, and creating passwords. Pay close attention to the installation output!
 
@@ -97,8 +98,8 @@ wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
   sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
 
 # Add repository
-echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | \
-  sudo tee /etc/apt/sources.list.d/elastic-8.x.list
+echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main" | \
+  sudo tee /etc/apt/sources.list.d/elastic-9.x.list
 ```
 
 ### Step 1.2: Install Elasticsearch
@@ -153,6 +154,7 @@ xpack.security.enrollment.enabled: true
 xpack.security.http.ssl:
   enabled: true
   keystore.path: certs/http.p12
+  truststore.path: certs/http.p12
 
 # Enable encryption for transport communications
 xpack.security.transport.ssl:
@@ -210,12 +212,12 @@ sudo cp /etc/elasticsearch/certs/http_ca.crt /tmp/
 sudo chmod 644 /tmp/http_ca.crt
 
 # Test connection (use the password you saved or reset)
-curl --cacert /etc/elasticsearch/certs/http_ca.crt -u elastic https://localhost:9200
+sudo curl --cacert /etc/elasticsearch/certs/http_ca.crt --resolve localhost:9200:127.0.0.1 -u elastic https://localhost:9200
 ```
 
 ---
 
-## Part 2: Install and Configure Kibana 8.x
+## Part 2: Install and Configure Kibana 9.x
 
 ### Step 2.1: Install Kibana
 
@@ -262,6 +264,10 @@ logging:
       - default
       - file
 
+# ---------------------------------- Security ----------------------------------
+# Enable security features
+xpack.security.enabled: true
+
 # ---------------------------------- Other -------------------------------------
 pid.file: /run/kibana/kibana.pid
 EOF
@@ -288,7 +294,7 @@ sudo systemctl status kibana.service
 
 ---
 
-## Part 3: Install and Configure Logstash 8.x
+## Part 3: Install and Configure Logstash 9.x
 
 ### Step 3.1: Install Logstash
 
@@ -347,7 +353,7 @@ sudo chmod 644 /etc/logstash/http_ca.crt
 
 ---
 
-## Part 4: Install and Configure Wazuh 4.9
+## Part 4: Install and Configure Wazuh 4.12
 
 ### Step 4.1: Add Wazuh Repository
 
@@ -409,7 +415,7 @@ sudo mkdir -p /etc/logstash/templates
 
 # Download template for Elasticsearch 8.x
 sudo curl -o /etc/logstash/templates/wazuh.json \
-  https://packages.wazuh.com/integrations/elastic/4.x-8.x/dashboards/wz-es-4.x-8.x-template.json
+  https://packages.wazuh.com/integrations/elastic/4.x-9.x/dashboards/wz-es-4.x-9.x-template.json
 ```
 
 ### Step 5.2: Create Wazuh Logstash Pipeline
@@ -458,6 +464,7 @@ output {
     template => "/etc/logstash/templates/wazuh.json"
     template_name => "wazuh"
     template_overwrite => true
+    manage_template => true
   }
   
   # Debug output - remove in production
@@ -579,6 +586,7 @@ output {
       password => "${ELASTICSEARCH_PASSWORD}"
       ssl => true
       cacert => "/etc/logstash/http_ca.crt"
+      manage_template => true
     }
   }
 }
@@ -665,7 +673,7 @@ sudo journalctl -u logstash -f
 
 ```bash
 # Download Wazuh dashboards
-wget https://packages.wazuh.com/integrations/elastic/4.x-8.x/dashboards/wz-es-4.x-8.x-dashboards.ndjson
+wget https://packages.wazuh.com/integrations/elastic/4.x-9.x/dashboards/wz-es-4.x-9.x-dashboards.ndjson
 
 # Import via Kibana:
 # Stack Management → Saved Objects → Import
@@ -795,14 +803,9 @@ sudo ufw enable
 ### 2. Enable HTTPS for Kibana
 
 ```bash
-# Generate certificates
-sudo /usr/share/elasticsearch/bin/elasticsearch-certutil cert \
-  --name kibana-server --dns your-domain.com --ip your-server-ip
-
-# Configure in kibana.yml
-server.ssl.enabled: true
-server.ssl.certificate: /path/to/kibana-server.crt
-server.ssl.key: /path/to/kibana-server.key
+# Kibana 9.x automatically configures HTTPS during enrollment if Elasticsearch has SSL enabled.
+# If you need to generate custom certificates, refer to the official Kibana documentation:
+# https://www.elastic.co/guide/en/kibana/current/configuring-tls.html
 ```
 
 ### 3. Regular Updates
@@ -906,16 +909,3 @@ This guide provides a production-ready Wazuh-ELK stack installation with:
 - **Monitoring**: Comprehensive logging and health checks
 - **Integration**: Wazuh and Suricata data collection
 - **Maintainability**: Clear structure and troubleshooting guides
-
-Remember to:
-
-1. Save all passwords securely
-2. Regularly update all components
-3. Monitor system resources
-4. Backup configurations regularly
-5. Test disaster recovery procedures
-
-For additional support, consult the official documentation:
-
-- [Wazuh Documentation](https://documentation.wazuh.com/)
-- [Elastic Documentation](https://www.elastic.co/guide/)
