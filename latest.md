@@ -51,8 +51,8 @@ sudo systemctl daemon-reload
 
 ```bash
 # Repo key & list
-curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
-  sudo gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
+  sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
 
 echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] \
 https://artifacts.elastic.co/packages/9.x/apt stable main" | \
