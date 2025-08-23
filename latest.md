@@ -5,17 +5,17 @@ A production-ready, **Debian 12 (Bookworm)** guide for deploying the **Elastic S
 > Dates & versions (checked on **2025-08-23**):
 >
 > * Elastic Stack **9.x** (Elasticsearch, Logstash, Kibana)
-> * Wazuh **4.12.x** (4.12.0 current major; 4.10.3 also maintained)
+> * Wazuh **4.12.x**
 > * pfSense latest 2.7/24.x with Suricata package (EVE JSON output)
 
 ---
 
 ## 0) Quick architecture
 
-* **Node A**: Wazuh Manager (and optionally Wazuh Indexer+Dashboard if you also use Wazuh stack)
+* **Node A**: Wazuh Manager
 * **Node B**: Elastic Stack (Elasticsearch + Kibana + Logstash) on Debian 12
 * **pfSense**: Suricata package → EVE JSON → remote syslog (TCP) → **Logstash**
-* **Wazuh → Logstash → Elasticsearch** (Wazuh *server integration* via alerts.json), or optionally **Wazuh Indexer → Logstash → Elasticsearch** if you run Wazuh Indexer and want dual-indexing.
+* **Wazuh → Logstash → Elasticsearch** (Wazuh *server integration* via alerts.json)
 
 ---
 
@@ -25,8 +25,7 @@ A production-ready, **Debian 12 (Bookworm)** guide for deploying the **Elastic S
 sudo apt update && sudo apt -y full-upgrade
 sudo timedatectl set-ntp true
 
-# Kernel settings required/recommended by Elastic & OpenSearch docs
-# (reboot not required for sysctl -w, but make persistent)
+# Kernel settings required/recommended by Elastic docs
 cat <<'EOF' | sudo tee /etc/sysctl.d/70-elastic.conf
 vm.max_map_count=262144
 fs.file-max=65536
@@ -43,8 +42,6 @@ LimitMEMLOCK=infinity
 EOF
 sudo systemctl daemon-reload
 ```
-
-> Tip: also set `bootstrap.memory_lock: true` in Elasticsearch and provide mlock capability; avoid swap.
 
 ---
 
@@ -73,7 +70,6 @@ sudo sed -i 's/^#\?node.name:.*/node.name: es1/' /etc/elasticsearch/elasticsearc
 sudo bash -c 'cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
 network.host: 0.0.0.0
 http.port: 9200
-# Production: enable xpack security (TLS + auth). For lab, you can disable.
 xpack.security.enabled: true
 bootstrap.memory_lock: true
 EOF'
@@ -84,7 +80,7 @@ sudo sed -i 's/^-Xmx.*/-Xmx4g/' /etc/elasticsearch/jvm.options.d/jvm.options || 
 
 sudo systemctl enable --now elasticsearch
 
-# If xpack security enabled, set built-in passwords (interactive):
+# Set built-in passwords (interactive):
 # sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic
 ```
 
@@ -94,24 +90,16 @@ sudo systemctl enable --now elasticsearch
 sudo bash -c 'cat >> /etc/kibana/kibana.yml <<EOF
 server.host: "0.0.0.0"
 elasticsearch.hosts: ["https://127.0.0.1:9200"]
-# if xpack security enabled, provide a user or kibana_system secrets via keystore
 EOF'
 
 sudo systemctl enable --now kibana
 ```
 
-> Optional: Set up HTTPS with a reverse proxy or Kibana TLS; create roles and users for least privilege.
-
 ---
 
-## 3) Wazuh → Elastic integration options
+## 3) Wazuh → Elastic integration
 
-There are **two supported paths** from Wazuh to Elastic:
-
-### A) Wazuh *server integration* (simple; no Wazuh Indexer required)
-
-* **Logstash reads** Wazuh Manager `alerts.json` and **writes** to Elasticsearch.
-* Best when you will visualize Wazuh alerts in **Kibana** only.
+We will use the **server integration**: Logstash reads Wazuh Manager `alerts.json` and writes to Elasticsearch.
 
 **Logstash secure keystore**
 
@@ -136,61 +124,8 @@ input {
   }
 }
 filter {
-  # Normalize timestamps
   date { match => ["timestamp", "ISO8601", "yyyy-MM-dd'T'HH:mm:ss.SSSZ"] target => "@timestamp" }
   mutate { add_tag => ["wazuh", "security"] }
-}
-output {
-  elasticsearch {
-    hosts => ["https://127.0.0.1:9200"]
-    user => "${ES_USER}"
-    password => "${ES_PASS}"
-    index => "wazuh-alerts-%{+YYYY.MM.dd}"
-    ssl => true
-    cacert => "/etc/elasticsearch/certs/http_ca.crt" # if using self-signed
-  }
-}
-```
-
-```bash
-sudo systemctl enable --now logstash
-```
-
-### B) Wazuh *indexer integration* (dual-write from Wazuh Indexer to Elastic)
-
-* **Logstash queries Wazuh Indexer** (OpenSearch-based) and forwards alerts to Elasticsearch.
-* Choose when you keep Wazuh dashboards but also want Elastic analytics/archival.
-
-**Keystore secrets**
-
-```bash
-# Wazuh Indexer creds
-read -p "Wazuh indexer user: " IU; echo -n "$IU" | sudo /usr/share/logstash/bin/logstash-keystore add WAZUH_INDEXER_USERNAME --stdin
-read -s -p "Wazuh indexer pass: " IP; echo -n "$IP" | sudo /usr/share/logstash/bin/logstash-keystore add WAZUH_INDEXER_PASSWORD --stdin
-# Elastic creds already stored as ES_USER/ES_PASS
-```
-
-**Pipeline: `/etc/logstash/conf.d/wazuh-indexer.conf`** (example queries last 1m continuously)
-
-```conf
-input {
-  opensearch {
-    hosts => ["https://wazuh-indexer.local:9200"]
-    user => "${WAZUH_INDEXER_USERNAME}"
-    password => "${WAZUH_INDEXER_PASSWORD}"
-    index => "wazuh-alerts-*"
-    schedule => "* * * * *"   # every minute
-    query => '{
-      "size": 1000,
-      "sort": [{"@timestamp": {"order": "asc"}}],
-      "query": {"range": {"@timestamp": {"gte": "now-70s"}}}
-    }'
-    ssl => true
-    cacert => "/etc/logstash/wazuh-indexer-certs/root-ca.pem"
-  }
-}
-filter {
-  mutate { add_tag => ["wazuh", "from-indexer"] }
 }
 output {
   elasticsearch {
@@ -204,7 +139,9 @@ output {
 }
 ```
 
-> Note: As of Wazuh **v4.6+**, the legacy *Wazuh for Elastic* app is no longer developed beyond critical fixes. Prefer Kibana visualizations/dashboards provided by Wazuh’s **redistributable Elastic dashboards**.
+```bash
+sudo systemctl enable --now logstash
+```
 
 ---
 
@@ -217,11 +154,8 @@ output {
 
    * **Enable EVE JSON**.
    * Outputs: check **Alerts**, **DNS**, **HTTP**, **TLS**, **Files**, as needed.
-   * **EVE syslog**: Enable **remote syslog** and set **Mode: TCP**, **Server**: `<Logstash_IP>` , **Port**: `5514` (match Logstash input).
+   * **EVE syslog**: Enable **remote syslog** and set **Mode: TCP**, **Server**: `<Logstash_IP>` , **Port**: `5514`.
    * Keep **"Include GeoIP"** on if you maintain the DB locally; else let Logstash/Elasticsearch enrich.
-3. Apply changes and ensure pfSense can reach Logstash TCP/5514.
-
-> Alternative: If you cannot use EVE syslog, mount/share `eve.json` to a forwarder (not typical on pfSense). Beats/Agent are not supported natively on pfSense.
 
 ### 4.2 Logstash pipeline for Suricata (`/etc/logstash/conf.d/suricata-pfsense.conf`)
 
@@ -234,13 +168,10 @@ input {
   }
 }
 filter {
-  # Suricata EVE usually has "timestamp"; use as @timestamp
   date { match => ["timestamp", "ISO8601", "yyyy-MM-dd'T'HH:mm:ss.SSSZ"] target => "@timestamp" }
-  # Ensure ECS-like fields for Elastic Suricata dashboards/queries
   mutate {
     add_field => {
       "event.module" => "suricata"
-      "network.transport" => "%{proto}"
       "observer.type" => "firewall"
       "observer.vendor" => "pfSense"
       "observer.product" => "Suricata"
@@ -264,9 +195,7 @@ output {
 sudo systemctl restart logstash
 ```
 
-### 4.3 Optional: GeoIP & ECS enrichment
-
-Install ingest-geoip in Elasticsearch and add Logstash `geoip` filter if your EVE lacks GeoIP fields.
+### 4.3 Optional: GeoIP enrichment
 
 ```bash
 sudo /usr/share/elasticsearch/bin/elasticsearch-plugin install ingest-geoip
@@ -290,7 +219,6 @@ filter {
 ### 5.1 Install Elastic Suricata integration (dashboards)
 
 * In **Kibana → Integrations**, search **Suricata** and install the integration. It ships dashboards that work with ECS-shaped Suricata data.
-* If not using Elastic Agent, point the integration at the **suricata-**\* index pattern you created.
 
 ### 5.2 Wazuh dashboards for Elastic
 
@@ -300,56 +228,43 @@ filter {
 
 ## 6) Security hardening
 
-* Enable TLS + auth across Elastic and Logstash; avoid plaintext on 9200/5601.
-* Use **Firewall** rules: only pfSense → Logstash TCP/5514; only Elastic guests → 9200; admins → 5601.
-* Rotate built-in user passwords; create **least-privilege** roles for Logstash ingestion.
-* Restrict Logstash pipelines by ID and lint configs with `--config.test_and_exit`.
+* Enable TLS + auth across Elastic and Logstash.
+* Use firewall rules: only pfSense → Logstash TCP/5514; only Elastic clients → 9200; admins → 5601.
+* Store secrets in Logstash keystore.
 
 ---
 
 ## 7) Index management (ILM) and sizing
 
-* Create ILM policies for `wazuh-alerts-*` and `suricata-*` (e.g., hot 7–30d, warm rollover, cold or delete).
+* Create ILM policies for `wazuh-alerts-*` and `suricata-*`.
 * Target primary shard size **30–50 GB**; avoid too many daily shards.
-* Use data streams if preferred: output to `logs-suricata-default` etc., with templates.
 
 ---
 
 ## 8) Health checks & troubleshooting
 
 ```bash
-# Elasticsearch
 curl -k -u elastic:**** https://127.0.0.1:9200/_cluster/health?pretty
 curl -k -u elastic:**** https://127.0.0.1:9200/_cat/indices?v
 
-# Logstash
 sudo journalctl -u logstash -e
 sudo /usr/share/logstash/bin/logstash --path.settings /etc/logstash \
   --config.test_and_exit
 
-# Wazuh Manager alerts flowing?
 sudo tail -f /var/ossec/logs/alerts/alerts.json
-
-# Validate Suricata events arrive from pfSense
 tcpdump -nni any tcp port 5514
 ```
 
-Common issues:
-
-* `vm.max_map_count` too low → set to **262144** and reload sysctl.
-* Certs/SSL mismatch → ensure CA paths and permissions for Logstash user.
-* Wrong timestamp parsing → verify `timestamp` field format in EVE; adjust `date` filter patterns.
-
 ---
 
-## 9) Review notes for your existing guide (actionable refinements)
+## 9) Review notes for your existing guide
 
-* **Versions**: Update Elastic to **9.x** and Wazuh to **4.12.x**. Remove references to the legacy “Wazuh app for Kibana” being maintained; it is **deprecated beyond critical fixes**.
-* **pfSense Suricata**: Prefer **EVE → remote syslog (TCP)** to Logstash with **`codec => json`**; explicitly map `src_ip/src_port/dest_*` to ECS fields.
-* **Security**: Add keystore usage for secrets (`ES_USER`, `ES_PASS`, Wazuh indexer creds) instead of plaintext in pipelines.
-* **ILM**: Include example ILM policies per index (retention, rollover, force merge), and discourage a shard-per-day with tiny data volumes.
+* **Versions**: Update Elastic to **9.x** and Wazuh to **4.12.x**.
+* **pfSense Suricata**: Prefer **EVE → remote syslog (TCP)** with **`codec => json`**; explicitly map `src_ip/src_port/dest_*` to ECS fields.
+* **Security**: Add keystore usage for secrets instead of plaintext.
+* **ILM**: Include example ILM policies; discourage unnecessary daily shards.
 * **Hardening**: Document TLS for 9200/5601/5514, memory lock, and ulimits.
-* **Validation**: Add `--config.test_and_exit` flow for Logstash and sample curl queries to confirm index creation.
+* **Validation**: Add `--config.test_and_exit` for Logstash and sample curl queries.
 
 ---
 
@@ -380,8 +295,6 @@ Common issues:
 }
 ```
 
-(Adjust to your ECS mappings or use data streams.)
-
 ### C) Service management
 
 ```bash
@@ -391,19 +304,19 @@ sudo systemctl status elasticsearch kibana logstash
 
 ---
 
-## 11) What to monitor (operational)
+## 11) What to monitor
 
-* Elasticsearch: heap usage, GC, indexing latency, search latency, disk watermark.
-* Logstash: queue/backpressure, dead letter queues, filter throughput.
-* Ingest volume: Suricata EPS spikes (DDoS, port scans), Wazuh alert rates during scans.
+* Elasticsearch: heap usage, GC, indexing latency.
+* Logstash: throughput, queue/backpressure.
+* Ingest volume: Suricata EPS spikes, Wazuh alert rates.
 
 ---
 
 ## 12) Migration & upgrades
 
 * Upgrade Elastic minor-first, then Kibana, then Logstash.
-* For Wazuh, follow 4.12.x release notes; test pipelines in non-prod before rolling.
-* Keep dashboards/datasources under version control (export NDJSON from Kibana).
+* For Wazuh, follow 4.12.x release notes.
+* Keep dashboards/datasources under version control.
 
 ---
 
