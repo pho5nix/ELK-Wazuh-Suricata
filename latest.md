@@ -324,53 +324,7 @@ sudo tee /etc/logstash/jvm.options.d/heap.options <<EOF
 EOF
 ```
 
-## Create the pipelines for Wazuh and Suricata
-
-### For Wazuh alerts
-```
-sudo tee /etc/logstash/conf.d/wazuh.conf <<'EOF'
-input {
-  file {
-    path => "/var/ossec/logs/alerts/alerts.json"
-    codec => "json"
-    start_position => "beginning"
-    stat_interval => "1 second"
-    mode => "tail"
-    ecs_compatibility => "disabled"
-  }
-}
-
-filter {
-  # Parse the timestamp field
-  if [timestamp] {
-    date {
-      match => ["timestamp", "ISO8601"]
-      target => "@timestamp"
-      remove_field => ["timestamp"]
-    }
-  }
-  
-  # Add metadata for index naming
-  mutate {
-    add_field => { 
-      "[@metadata][index_prefix]" => "wazuh-alerts-4.x"
-    }
-  }
-}
-
-output {
-  elasticsearch {
-    hosts => ["https://localhost:9200"]
-    index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
-    user => "elastic"
-    password => "your_elastic_password"
-    ssl_enabled => true
-    ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
-    ssl_verification_mode => "full"
-  }
-}
-EOF
-```
+## Create the pipelines for Suricata
 
 ### For Suricata (from pfSense)
 ```
@@ -446,30 +400,71 @@ output {
 EOF
 ```
 
+## Note: Do not start logstash service before install Wazuh Manager
+
+
 ## 5. Wazuh Manager Integration
 
-Install Wazuh Manager:
-
-```bash
-curl -sO https://packages.wazuh.com/4.12/wazuh-install.sh
-sudo bash wazuh-install.sh -i
+Step 1: Install Wazuh Manager ONLY (not the full stack):
+bash
+```
+# Add Wazuh repository
+curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | \
+  gpg --dearmor | sudo tee /usr/share/keyrings/wazuh.gpg >/dev/null
+```
+```
+echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | \
+  sudo tee /etc/apt/sources.list.d/wazuh.list
+```
+# Install ONLY the Wazuh Manager
+```
+sudo apt-get update
+sudo apt-get install wazuh-manager
+```
+# Start Wazuh Manager
+```
+sudo systemctl daemon-reload
+sudo systemctl enable wazuh-manager
+sudo systemctl start wazuh-manager
 ```
 
-Configure Logstash pipeline `/etc/logstash/conf.d/01-wazuh.conf`:
-
-```conf
+Step 2: Configure permissions:
+```
+# Allow Logstash to read Wazuh alerts
+sudo usermod -a -G wazuh logstash
+```
+Step 3: Configure Logstash pipeline (corrected for 9.1.2):
+```
+sudo tee /etc/logstash/conf.d/01-wazuh.conf <<'EOF'
 input {
   file {
     path => "/var/ossec/logs/alerts/alerts.json"
-    codec => json
+    codec => "json"
+    start_position => "beginning"
+    stat_interval => "1 second"
+    mode => "tail"
     type => "wazuh-alerts"
+    ecs_compatibility => "disabled"
   }
 }
 
 filter {
   if [type] == "wazuh-alerts" {
-    date {
-      match => [ "timestamp", "ISO8601" ]
+    # Parse Wazuh timestamp
+    if [timestamp] {
+      date {
+        match => ["timestamp", "ISO8601"]
+        target => "@timestamp"
+        remove_field => ["timestamp"]
+      }
+    }
+    
+    # Add metadata for better organization
+    mutate {
+      add_field => { 
+        "[@metadata][index_prefix]" => "wazuh-alerts-4.x"
+        "[@metadata][document_type]" => "wazuh"
+      }
     }
   }
 }
@@ -477,18 +472,22 @@ filter {
 output {
   if [type] == "wazuh-alerts" {
     elasticsearch {
-      hosts => ["https://127.0.0.1:9200"]
-      index => "wazuh-alerts-%{+YYYY.MM.dd}"
+      hosts => ["https://localhost:9200"]
+      index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
       user => "elastic"
-      password => "<elastic_password>"
-      ssl => true
-      cacert => "/etc/logstash/certs/http_ca.crt"
+      password => "your_elastic_password_here"
+      # Correct SSL configuration for 9.1.2
+      ssl_enabled => true
+      ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
+      ssl_verification_mode => "full"
     }
   }
 }
+EOF
 ```
 
----
+
+
 
 ## 6. pfSense Suricata Integration
 
