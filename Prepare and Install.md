@@ -43,10 +43,10 @@ run:
 sudo systemctl edit elasticsearch
 ```
 Add the below changes in this file:
-
+```
 [Service]
 LimitMEMLOCK=infinity
-
+```
 Save file and run:
 ```
 sudo systemctl daemon-reload
