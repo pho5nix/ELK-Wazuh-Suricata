@@ -1,4 +1,4 @@
-# ELK + Wazuh + Suricata on Debian 12 (with TLS, pfSense Suricata)
+# ELK Stack - Wazuh - Suricata
 
 ### System Requirements
 
