@@ -257,7 +257,13 @@ Check the Elasticsearch is running
 ```
 sudo curl --cacert /etc/elasticsearch/certs/http_ca.crt --resolve localhost:9200:127.0.0.1 -u elastic https://localhost:9200
 ```
+---
+
+---
+
 Input elastic password.
+---
+---
 The call should return a response like this:
 ```
 {
