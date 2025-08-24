@@ -260,7 +260,7 @@ sudo curl --cacert /etc/elasticsearch/certs/http_ca.crt --resolve localhost:9200
 ---
 
 ---
-
+-
 Input elastic password.
 ---
 ---
