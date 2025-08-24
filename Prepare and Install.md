@@ -2,6 +2,7 @@
 
 ### System Resources - Configuration
 
+- **OS**: Debian 12
 - **RAM**: 32GB
 - **CPU**: 8 cores
 - **Disk Space**: 256GB SSD
