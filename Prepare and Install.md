@@ -240,7 +240,7 @@ http.host: 0.0.0.0
 Enable and start:
 
 ```
-sudo systemctl enable elasticsearch --now
+sudo systemctl enable elasticsearch
 ```
 ---
 
@@ -314,7 +314,7 @@ sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kiban
 Enable and start:
 
 ```
-sudo systemctl enable kibana --now
+sudo systemctl enable kibana
 ```
 
 Access Kibana: `http://localhost:5601`
