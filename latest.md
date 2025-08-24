@@ -8,7 +8,7 @@
 - **Network**: Static IP configuration required
 
 ---
-## 1. System Preparation
+# 1. System Preparation
 
 Import the Elasticsearch PGP key
 ```
@@ -83,7 +83,7 @@ echo "net.ipv4.tcp_retries2=5" | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
-## Step 1.4: Configure JVM Options
+## Configure JVM Options
 Configure heap size (50% of available RAM, max 31GB)
 
 ```
@@ -94,7 +94,7 @@ sudo tee /etc/elasticsearch/jvm.options.d/heap.options <<EOF
 EOF
 ```
 
-### Step 1.3: Configure Elasticsearch for Production
+## Configure Elasticsearch for Production
 
 ```
 # Backup original configuration
@@ -264,7 +264,7 @@ The call should return a response like this:
 }
 ```
 
-## 3. Install Kibana
+# Install Kibana
 
 ```bash
 sudo apt install kibana -y
@@ -279,7 +279,7 @@ sudo chown kibana:kibana /etc/kibana/http_ca.crt
 
 Edit `/etc/kibana/kibana.yml`:
 
-```yaml
+```
 server.port: 5601
 server.host: "0.0.0.0"
 server.name: "wazuh-kibana"
@@ -301,7 +301,7 @@ Access Kibana: `http://localhost:5601`
 ---
 
 
-## 4. Install Logstash
+# Install Logstash
 
 ```bash
 sudo apt install logstash -y
@@ -322,10 +322,9 @@ EOF
 ```
 
 
-## 5. Wazuh Manager Integration
+# Wazuh Manager Integration
 
-Step 1: Install Wazuh Manager ONLY (not the full stack):
-bash
+## Install Wazuh Manager ONLY
 ```
 # Add Wazuh repository
 curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | \
@@ -335,7 +334,7 @@ curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | \
 echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | \
   sudo tee /etc/apt/sources.list.d/wazuh.list
 ```
-# Install ONLY the Wazuh Manager
+## Install ONLY the Wazuh Manager
 ```
 sudo apt-get update
 sudo apt-get install wazuh-manager
@@ -347,12 +346,12 @@ sudo systemctl enable wazuh-manager
 sudo systemctl start wazuh-manager
 ```
 
-Step 2: Configure permissions:
+## Configure permissions:
 ```
 # Allow Logstash to read Wazuh alerts
 sudo usermod -a -G wazuh logstash
 ```
-Step 3: Configure Logstash pipeline (corrected for 9.1.2):
+## Configure Logstash pipeline:
 ```
 sudo tee /etc/logstash/conf.d/01-wazuh.conf <<'EOF'
 input {
@@ -405,15 +404,16 @@ output {
 EOF
 ```
 
-### Enable and start logstash
+## Enable and start logstash
 ```
 sudo sytemctl enable logstash
 sudo sytemctl start logstash
 ```
 
-## Create Index Pattern in Kibana:
+# Create Index Pattern in Kibana:
 
 Open Kibana: Go to http://your-server-ip:5601
+
 Navigate to Stack Management:
 
 Click the hamburger menu (☰)
