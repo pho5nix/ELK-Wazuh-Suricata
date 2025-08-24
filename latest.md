@@ -475,7 +475,7 @@ output {
       hosts => ["https://localhost:9200"]
       index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
       user => "elastic"
-      password => "your_elastic_password_here"
+      password => "aXfyRz5obhRQieKAcJZR"
       # Correct SSL configuration for 9.1.2
       ssl_enabled => true
       ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
@@ -486,85 +486,10 @@ output {
 EOF
 ```
 
-
-
-
-## 6. pfSense Suricata Integration
-
-On pfSense, install **syslog-ng** (via package manager).
-
-Configure syslog-ng to send Suricata EVE logs over TLS to Logstash:
-
-* Import `logstash.crt` into pfSense Cert Manager as a trusted CA.
-* Configure syslog-ng destination:
-
-```conf
-destination d_logstash {
-  tcp("<elk-server-ip>" port(5514) tls(peer-verify(required-trusted)));
-};
-log { source(s_suricata); destination(d_logstash); };
+### Enable and start logstash
+```
+sudo sytemctl enable logstash
+sudo sytemctl start logstash
 ```
 
-On Logstash, create Suricata pipeline `/etc/logstash/conf.d/02-suricata.conf`:
 
-```conf
-input {
-  tcp {
-    port => 5514
-    codec => json
-    ssl_enable => true
-    ssl_cert => "/etc/logstash/certs/logstash.crt"
-    ssl_key => "/etc/logstash/certs/logstash.key"
-  }
-}
-
-filter {
-  if [event_type] {
-    date { match => [ "timestamp", "ISO8601" ] }
-    mutate {
-      rename => { "src_ip" => "source.ip" }
-      rename => { "src_port" => "source.port" }
-      rename => { "dest_ip" => "destination.ip" }
-      rename => { "dest_port" => "destination.port" }
-    }
-  }
-}
-
-output {
-  elasticsearch {
-    hosts => ["https://127.0.0.1:9200"]
-    index => "suricata-%{+YYYY.MM.dd}"
-    user => "elastic"
-    password => "<elastic_password>"
-    ssl => true
-    cacert => "/etc/logstash/certs/http_ca.crt"
-  }
-}
-```
-
-Restart Logstash:
-
-```bash
-sudo systemctl restart logstash
-```
-
----
-
-## 7. Verify Data Flow
-
-* Wazuh alerts should appear in index: `wazuh-alerts-*`
-* Suricata logs should appear in index: `suricata-*`
-* In Kibana, create index patterns for both.
-
----
-
-## 8. Security & Performance Notes
-
-* TLS is enforced between all components.
-* Only CA certs are copied — never private keys.
-* Indices use daily rollover for manageability.
-* System tuned with `vm.max_map_count` and ulimits.
-
----
-
-✅ Deployment complete: **ELK + Wazuh + Suricata (pfSense)** on Debian 12, with TLS and production readiness.
