@@ -6,9 +6,10 @@
 - **CPU**: 8 cores
 - **Disk Space**: 256GB SSD
 - **Network**: Static IP configuration required
+---
 
 ---
-# 1. System Preparation
+## Elasticsearch installation and System Configuration
 
 Import the Elasticsearch PGP key
 ```
@@ -33,18 +34,19 @@ sudo apt-get update && sudo apt-get install elasticsearch
 ---
 
 ---
-## Systemd Configuration
+## System Configuration for Elasticsearch
 
 Set ulimits required by Elasticsearch:
 run:
 ```
 sudo systemctl edit elasticsearch
 ```
-Add the below changes in this file
+Add the below changes in this file:
+
 [Service]
 LimitMEMLOCK=infinity
 
-run:
+Save file and run:
 ```
 sudo systemctl daemon-reload
 ```
@@ -94,8 +96,7 @@ sudo tee /etc/elasticsearch/jvm.options.d/heap.options <<EOF
 EOF
 ```
 
-## Configure Elasticsearch for Production
-
+## Configure Elasticsearch.yml
 ```
 # Backup original configuration
 sudo cp /etc/elasticsearch/elasticsearch.yml /etc/elasticsearch/elasticsearch.yml.orig
@@ -225,10 +226,13 @@ http.host: 0.0.0.0
 #----------------------- END SECURITY AUTO CONFIGURATION -------------------------
 
 ```
+---
+
+---
 
 Enable and start:
 
-```bash
+```
 sudo systemctl enable elasticsearch --now
 ```
 
@@ -243,17 +247,18 @@ Check the Elasticsearch is running
 ```
 sudo curl --cacert /etc/elasticsearch/certs/http_ca.crt --resolve localhost:9200:127.0.0.1 -u elastic https://localhost:9200
 ```
+Input elastic password.
 The call should return a response like this:
 ```
 {
   "name" : "es-node-1",
   "cluster_name" : "wazuh-elastic-cluster",
-  "cluster_uuid" : "XCMoW74GTVOIBwxEzd_vsw",
+  "cluster_uuid" : "fefgsevSGVBSDBasdfgasdGGR",
   "version" : {
     "number" : "9.1.2",
     "build_flavor" : "default",
     "build_type" : "deb",
-    "build_hash" : "ca1a70216fbdefbef3c65b1dff04903ea5964ef5",
+    "build_hash" : "04903ea5964ksgjsfklngbosfngbsf97u8907ef5",
     "build_date" : "2025-08-11T15:04:41.449624592Z",
     "build_snapshot" : false,
     "lucene_version" : "10.2.2",
@@ -276,6 +281,9 @@ Copy `http_ca.crt` from Elasticsearch:
 sudo cp /etc/elasticsearch/certs/http_ca.crt /etc/kibana/
 sudo chown kibana:kibana /etc/kibana/http_ca.crt
 ```
+---
+
+---
 
 Edit `/etc/kibana/kibana.yml`:
 
@@ -285,14 +293,15 @@ server.host: "0.0.0.0"
 server.name: "wazuh-kibana"
 server.publicBaseUrl: "http://your-server-ip:5601"
 ```
-Create enrollment token from Elasticsearch and copy for enroll kibana when start
+
+Create enrollment token from Elasticsearch and copy for enroll kibana when start.
 ```
 sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
 ```
 
 Enable and start:
 
-```bash
+```
 sudo systemctl enable kibana --now
 ```
 
@@ -300,13 +309,15 @@ Access Kibana: `http://localhost:5601`
 
 ---
 
+---
 
-# Install Logstash
+## Install Logstash
 
-```bash
+```
 sudo apt install logstash -y
 ```
-Copy the auto-generated certificate from Elasticsearch 9.1.2
+
+Copy the auto-generated certificate from Elasticsearch
 ```
 sudo cp /etc/elasticsearch/certs/http_ca.crt /etc/logstash/
 sudo chown logstash:logstash /etc/logstash/http_ca.crt
@@ -321,10 +332,12 @@ sudo tee /etc/logstash/jvm.options.d/heap.options <<EOF
 EOF
 ```
 
+---
 
+---
 # Wazuh Manager Integration
 
-## Install Wazuh Manager ONLY
+## Import the Wazuh PGP key and add repository
 ```
 # Add Wazuh repository
 curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | \
@@ -339,7 +352,7 @@ echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4
 sudo apt-get update
 sudo apt-get install wazuh-manager
 ```
-# Start Wazuh Manager
+## Start Wazuh Manager
 ```
 sudo systemctl daemon-reload
 sudo systemctl enable wazuh-manager
@@ -351,6 +364,7 @@ sudo systemctl start wazuh-manager
 # Allow Logstash to read Wazuh alerts
 sudo usermod -a -G wazuh logstash
 ```
+
 ## Configure Logstash pipeline:
 ```
 sudo tee /etc/logstash/conf.d/01-wazuh.conf <<'EOF'
@@ -410,6 +424,10 @@ sudo sytemctl enable logstash
 sudo sytemctl start logstash
 ```
 
+---
+
+---
+
 # Create Index Pattern in Kibana:
 
 Open Kibana: Go to http://your-server-ip:5601
@@ -417,14 +435,14 @@ Open Kibana: Go to http://your-server-ip:5601
 Navigate to Stack Management:
 
 Click the hamburger menu (☰)
-Go to Management → Stack Management
-
-
-Create Data View:
+Go to Management --> Stack Management
+Go to Kibana --> Data Views
 
 Click on Kibana → Data Views
 Click Create data view
+---
 
+---
 
 Configure Wazuh Data View:
 
@@ -434,9 +452,11 @@ You should see matching indices below (like wazuh-alerts-4.x-2025.08.24)
 Timestamp field: Select @timestamp
 Click Save data view to Kibana
 
+---
 
+---
 Verify Data:
 
-Go to Analytics → Discover
+Go to Analytics --> Discover
 Select your "Wazuh Alerts" data view
 You should see Wazuh alerts!
