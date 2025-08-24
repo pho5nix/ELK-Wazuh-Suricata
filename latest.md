@@ -1,21 +1,21 @@
-# ELK Stack - Wazuh - Suricata
+# ELK Stack - Wazuh
 
-### System Requirements
+### System Resources - Configuration
 
-- **RAM**: Minimum 32GB
+- **RAM**: 32GB
 - **CPU**: 8 cores minimum (16 cores recommended)
 - **Disk Space**: 256GB SSD
 - **Network**: Static IP configuration required
 
-
+---
 ## 1. System Preparation
 
-Step 1: Import the Elasticsearch PGP key
+Import the Elasticsearch PGP key
 ```
 wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
 ```
 
-Step 2: Install Elasticsearch from the APT repository
+Install Elasticsearch from the APT repository
 You may need to install the apt-transport-https package on Debian before proceeding:
 ```
 sudo apt-get install apt-transport-https
@@ -30,7 +30,7 @@ Install the Elasticsearch Debian package:
 ```
 sudo apt-get update && sudo apt-get install elasticsearch
 ```
-
+---
 ## Systemd Configuration
 
 Set ulimits required by Elasticsearch:
@@ -185,11 +185,6 @@ http.port: 9200
 #action.destructive_requires_name: false
 #
 #
-#---------------------------------- Indices ------------------------------------
-#
-action.auto_create_index: ".monitoring*,.watches,.triggered_watches,.watcher-history*,.ml*,wazuh-*,suricata-*"
-#
-#
 #----------------------- BEGIN SECURITY AUTO CONFIGURATION -----------------------
 #
 # The following settings, TLS certificates, and keys have been automatically      
@@ -324,84 +319,6 @@ sudo tee /etc/logstash/jvm.options.d/heap.options <<EOF
 EOF
 ```
 
-## Create the pipelines for Suricata
-
-### For Suricata (from pfSense)
-```
-sudo tee /etc/logstash/conf.d/suricata.conf <<'EOF'
-input {
-  # Syslog input for pfSense/Suricata
-  syslog {
-    port => 5514
-    type => "suricata"
-  }
-  
-  # Alternative: TCP JSON input
-  tcp {
-    port => 5515
-    codec => "json_lines"
-    type => "suricata-json"
-  }
-}
-
-filter {
-  if [type] == "suricata" or [type] == "suricata-json" {
-    
-    # Parse JSON if it's in message field
-    if [message] =~ /^\{.*\}$/ {
-      json {
-        source => "message"
-        target => "suricata"
-      }
-    }
-    
-    # Parse timestamp
-    if [suricata][timestamp] {
-      date {
-        match => ["[suricata][timestamp]", "ISO8601"]
-        target => "@timestamp"
-      }
-    } else if [timestamp] {
-      date {
-        match => ["timestamp", "ISO8601"]
-        target => "@timestamp"
-      }
-    }
-    
-    # Add event type tagging
-    if [suricata][event_type] == "alert" or [event_type] == "alert" {
-      mutate {
-        add_tag => ["ids-alert", "security"]
-      }
-    }
-    
-    # Add metadata for index
-    mutate {
-      add_field => { 
-        "[@metadata][index_prefix]" => "suricata"
-      }
-    }
-  }
-}
-
-output {
-  if [type] == "suricata" or [type] == "suricata-json" {
-    elasticsearch {
-      hosts => ["https://localhost:9200"]
-      index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
-      user => "elastic"
-      password => "your_elastic_password"
-      ssl_enabled => true
-      ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
-      ssl_verification_mode => "full"
-    }
-  }
-}
-EOF
-```
-
-## Note: Do not start logstash service before install Wazuh Manager
-
 
 ## 5. Wazuh Manager Integration
 
@@ -475,7 +392,7 @@ output {
       hosts => ["https://localhost:9200"]
       index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
       user => "elastic"
-      password => "aXfyRz5obhRQieKAcJZR"
+      password => "your_elastic_password"
       # Correct SSL configuration for 9.1.2
       ssl_enabled => true
       ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
@@ -492,4 +409,32 @@ sudo sytemctl enable logstash
 sudo sytemctl start logstash
 ```
 
+## Create Index Pattern in Kibana:
 
+Open Kibana: Go to http://your-server-ip:5601
+Navigate to Stack Management:
+
+Click the hamburger menu (☰)
+Go to Management → Stack Management
+
+
+Create Data View:
+
+Click on Kibana → Data Views
+Click Create data view
+
+
+Configure Wazuh Data View:
+
+Name: Wazuh Alerts
+Index pattern: wazuh-alerts-4.x-*
+You should see matching indices below (like wazuh-alerts-4.x-2025.08.24)
+Timestamp field: Select @timestamp
+Click Save data view to Kibana
+
+
+Verify Data:
+
+Go to Analytics → Discover
+Select your "Wazuh Alerts" data view
+You should see Wazuh alerts!
