@@ -30,6 +30,8 @@ Install the Elasticsearch Debian package:
 ```
 sudo apt-get update && sudo apt-get install elasticsearch
 ```
+
+
 ---
 ## Systemd Configuration
 
