@@ -142,10 +142,6 @@ action.auto_create_index: ".monitoring*,.watches,.triggered_watches,.watcher-his
 EOF
 ```
 
-
-
-
-
 Enable and start:
 
 ```bash
@@ -159,23 +155,35 @@ Secure Elasticsearch with auto-generated TLS:
 ```
 
 Save the password. Copy `/etc/elasticsearch/certs/http_ca.crt` for Kibana and Logstash trust.
-
----
+Check the Elasticsearch is running
+```
+sudo curl --cacert /etc/elasticsearch/certs/http_ca.crt --resolve localhost:9200:127.0.0.1 -u elastic https://localhost:9200
+```
+The call should return a response like this:
+```
+{
+  "name" : "es-node-1",
+  "cluster_name" : "wazuh-elastic-cluster",
+  "cluster_uuid" : "XCMoW74GTVOIBwxEzd_vsw",
+  "version" : {
+    "number" : "9.1.2",
+    "build_flavor" : "default",
+    "build_type" : "deb",
+    "build_hash" : "ca1a70216fbdefbef3c65b1dff04903ea5964ef5",
+    "build_date" : "2025-08-11T15:04:41.449624592Z",
+    "build_snapshot" : false,
+    "lucene_version" : "10.2.2",
+    "minimum_wire_compatibility_version" : "8.19.0",
+    "minimum_index_compatibility_version" : "8.0.0"
+  },
+  "tagline" : "You Know, for Search"
+}
+```
 
 ## 3. Install Kibana
 
 ```bash
 sudo apt install kibana -y
-```
-
-Edit `/etc/kibana/kibana.yml`:
-
-```yaml
-server.host: "0.0.0.0"
-elasticsearch.hosts: ["https://127.0.0.1:9200"]
-elasticsearch.username: "elastic"
-elasticsearch.password: "<elastic_password>"
-elasticsearch.ssl.certificateAuthorities: ["/etc/kibana/http_ca.crt"]
 ```
 
 Copy `http_ca.crt` from Elasticsearch:
@@ -185,15 +193,33 @@ sudo cp /etc/elasticsearch/certs/http_ca.crt /etc/kibana/
 sudo chown kibana:kibana /etc/kibana/http_ca.crt
 ```
 
+Edit `/etc/kibana/kibana.yml`:
+
+```yaml
+server.port: 5601
+server.host: "0.0.0.0"
+server.name: "wazuh-kibana"
+server.publicBaseUrl: "http://your-server-ip:5601"
+```
+Create enrollment token from Elasticsearch and copy for enroll kibana when start
+```
+sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
+```
+
 Enable and start:
 
 ```bash
 sudo systemctl enable kibana --now
 ```
 
-Access Kibana: `https://<server-ip>:5601`
+Access Kibana: `http://localhost:5601`
 
 ---
+
+
+
+
+
 
 ## 4. Install Logstash
 
