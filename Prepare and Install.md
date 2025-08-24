@@ -1,9 +1,9 @@
-# ELK Stack - Wazuh
+# ELK Stack - Wazuh Integration
 
 ### System Resources - Configuration
 
 - **RAM**: 32GB
-- **CPU**: 8 cores minimum (16 cores recommended)
+- **CPU**: 8 cores
 - **Disk Space**: 256GB SSD
 - **Network**: Static IP configuration required
 
@@ -30,7 +30,7 @@ Install the Elasticsearch Debian package:
 ```
 sudo apt-get update && sudo apt-get install elasticsearch
 ```
-
+---
 
 ---
 ## Systemd Configuration
