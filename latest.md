@@ -304,31 +304,147 @@ Access Kibana: `http://localhost:5601`
 ---
 
 
-
-
-
-
 ## 4. Install Logstash
 
 ```bash
 sudo apt install logstash -y
 ```
-
-Create TLS cert for Logstash:
-
-```bash
-sudo mkdir -p /etc/logstash/certs
-cd /etc/logstash/certs
-openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout logstash.key -out logstash.crt -subj "/CN=logstash.local"
+Copy the auto-generated certificate from Elasticsearch 9.1.2
+```
+sudo cp /etc/elasticsearch/certs/http_ca.crt /etc/logstash/
+sudo chown logstash:logstash /etc/logstash/http_ca.crt
+sudo chmod 644 /etc/logstash/http_ca.crt
+```
+(Optional) Adjust JVM Heap
+Only if you need more than default 1GB
+```
+sudo tee /etc/logstash/jvm.options.d/heap.options <<EOF
+-Xms4g
+-Xmx4g
+EOF
 ```
 
-Copy Elasticsearch CA for Logstash:
+## Create the pipelines for Wazuh and Suricata
 
-```bash
-sudo cp /etc/elasticsearch/certs/http_ca.crt /etc/logstash/certs/
+### For Wazuh alerts
+```
+sudo tee /etc/logstash/conf.d/wazuh.conf <<'EOF'
+input {
+  file {
+    path => "/var/ossec/logs/alerts/alerts.json"
+    codec => "json"
+    start_position => "beginning"
+    stat_interval => "1 second"
+    mode => "tail"
+    ecs_compatibility => "disabled"
+  }
+}
+
+filter {
+  # Parse the timestamp field
+  if [timestamp] {
+    date {
+      match => ["timestamp", "ISO8601"]
+      target => "@timestamp"
+      remove_field => ["timestamp"]
+    }
+  }
+  
+  # Add metadata for index naming
+  mutate {
+    add_field => { 
+      "[@metadata][index_prefix]" => "wazuh-alerts-4.x"
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["https://localhost:9200"]
+    index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
+    user => "elastic"
+    password => "your_elastic_password"
+    ssl_enabled => true
+    ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
+    ssl_verification_mode => "full"
+  }
+}
+EOF
 ```
 
----
+### For Suricata (from pfSense)
+```
+sudo tee /etc/logstash/conf.d/suricata.conf <<'EOF'
+input {
+  # Syslog input for pfSense/Suricata
+  syslog {
+    port => 5514
+    type => "suricata"
+  }
+  
+  # Alternative: TCP JSON input
+  tcp {
+    port => 5515
+    codec => "json_lines"
+    type => "suricata-json"
+  }
+}
+
+filter {
+  if [type] == "suricata" or [type] == "suricata-json" {
+    
+    # Parse JSON if it's in message field
+    if [message] =~ /^\{.*\}$/ {
+      json {
+        source => "message"
+        target => "suricata"
+      }
+    }
+    
+    # Parse timestamp
+    if [suricata][timestamp] {
+      date {
+        match => ["[suricata][timestamp]", "ISO8601"]
+        target => "@timestamp"
+      }
+    } else if [timestamp] {
+      date {
+        match => ["timestamp", "ISO8601"]
+        target => "@timestamp"
+      }
+    }
+    
+    # Add event type tagging
+    if [suricata][event_type] == "alert" or [event_type] == "alert" {
+      mutate {
+        add_tag => ["ids-alert", "security"]
+      }
+    }
+    
+    # Add metadata for index
+    mutate {
+      add_field => { 
+        "[@metadata][index_prefix]" => "suricata"
+      }
+    }
+  }
+}
+
+output {
+  if [type] == "suricata" or [type] == "suricata-json" {
+    elasticsearch {
+      hosts => ["https://localhost:9200"]
+      index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
+      user => "elastic"
+      password => "your_elastic_password"
+      ssl_enabled => true
+      ssl_certificate_authorities => ["/etc/logstash/http_ca.crt"]
+      ssl_verification_mode => "full"
+    }
+  }
+}
+EOF
+```
 
 ## 5. Wazuh Manager Integration
 
