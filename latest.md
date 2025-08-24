@@ -4,38 +4,82 @@ This guide describes how to deploy a complete stack consisting of **Elasticsearc
 
 ---
 
+
+### System Requirements
+
+- **RAM**: Minimum 32GB
+- **CPU**: 8 cores minimum (16 cores recommended)
+- **Disk Space**: 256GB SSD
+- **Network**: Static IP configuration required
+
+
 ## 1. System Preparation
 
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install apt-transport-https wget curl gnupg lsb-release unzip -y
-```
+Step 1: Import the Elasticsearch PGP key
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
 
-Set kernel and ulimits required by Elasticsearch:
+Step 2: Install Elasticsearch from the APT repository
+You may need to install the apt-transport-https package on Debian before proceeding:
+sudo apt-get install apt-transport-https
 
-```bash
+Save the repository definition to /etc/apt/sources.list.d/elastic-9.x.list:
+echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-9.x.list
+
+Install the Elasticsearch Debian package:
+sudo apt-get update && sudo apt-get install elasticsearch
+
+
+## Systemd Configuration
+
+Set ulimits required by Elasticsearch:
+run:
+sudo systemctl edit elasticsearch
+
+Add the below changes in this file
+[Service]
+LimitMEMLOCK=infinity
+
+run:
+sudo systemctl daemon-reload
+
+## Disable all swap files
+sudo swapoff -a
+
+Comment out swap line in fstab to make permanent
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+
+## Increase virtual memory for Elasticsearch mmapfs
+sudo sysctl -w vm.max_map_count=262144
+
+To set this value permanently, update the vm.max_map_count setting in /etc/sysctl.conf. 
+To verify after rebooting, run sysctl vm.max_map_count.
 echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 
-echo "* - nofile 65535" | sudo tee -a /etc/security/limits.conf
-```
+## Decrease the TCP retransmission timeout
+sysctl -w net.ipv4.tcp_retries2=5
 
----
+To set this value permanently, update the net.ipv4.tcp_retries2 setting in /etc/sysctl.conf. 
+To verify after rebooting, run sysctl net.ipv4.tcp_retries2.
+echo "net.ipv4.tcp_retries2=5" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
 
-## 2. Install Elasticsearch 9.x
+## Step 1.4: Configure JVM Options
+Configure heap size (50% of available RAM, max 31GB)
 
-Import Elastic GPG key and repo:
+sudo tee /etc/elasticsearch/jvm.options.d/heap.options <<EOF
+# Heap size - adjust based on your system (example for 16GB RAM system)
+-Xms8g
+-Xmx8g
+EOF
 
-```bash
-wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic.gpg
-echo "deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-9.x.list
-```
 
-Install:
 
-```bash
-sudo apt update && sudo apt install elasticsearch -y
-```
+
+
+
+
+
 
 Enable and start:
 
