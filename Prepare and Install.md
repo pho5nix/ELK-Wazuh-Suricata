@@ -96,14 +96,17 @@ sudo tee /etc/elasticsearch/jvm.options.d/heap.options <<EOF
 -Xmx8g
 EOF
 ```
+---
 
-## Configure Elasticsearch.yml
+---
 
-# Backup original configuration
+# Configure Elasticsearch.yml
+
+## Backup original configuration
 ```
 sudo cp /etc/elasticsearch/elasticsearch.yml /etc/elasticsearch/elasticsearch.yml.orig
 ```
-# Edit configuration file
+## Edit configuration file
 ```
 # Edit configuration
 # ======================== Elasticsearch Configuration =========================
@@ -239,10 +242,13 @@ Enable and start:
 ```
 sudo systemctl enable elasticsearch --now
 ```
+---
+
+---
 
 Secure Elasticsearch with auto-generated TLS:
 
-```bash
+```
 /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic
 ```
 
@@ -315,7 +321,7 @@ Access Kibana: `http://localhost:5601`
 
 ---
 
-## Install Logstash
+# Install Logstash
 
 ```
 sudo apt install logstash -y
