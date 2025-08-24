@@ -98,10 +98,13 @@ EOF
 ```
 
 ## Configure Elasticsearch.yml
-```
-# Backup original configuration
-sudo cp /etc/elasticsearch/elasticsearch.yml /etc/elasticsearch/elasticsearch.yml.orig
 
+# Backup original configuration
+```
+sudo cp /etc/elasticsearch/elasticsearch.yml /etc/elasticsearch/elasticsearch.yml.orig
+```
+# Edit configuration file
+```
 # Edit configuration
 # ======================== Elasticsearch Configuration =========================
 #
