@@ -92,8 +92,55 @@ sudo tee /etc/elasticsearch/jvm.options.d/heap.options <<EOF
 EOF
 ```
 
+### Step 1.3: Configure Elasticsearch for Production
 
+```bash
+# Backup original configuration
+sudo cp /etc/elasticsearch/elasticsearch.yml /etc/elasticsearch/elasticsearch.yml.orig
 
+# Edit configuration
+sudo tee /etc/elasticsearch/elasticsearch.yml <<EOF
+# ======================== Elasticsearch Configuration =========================
+#
+# ---------------------------------- Cluster -----------------------------------
+cluster.name: wazuh-elastic-cluster
+
+# ------------------------------------ Node ------------------------------------
+node.name: es-node-1
+
+# ----------------------------------- Paths ------------------------------------
+path.data: /var/lib/elasticsearch
+path.logs: /var/log/elasticsearch
+
+# ----------------------------------- Memory -----------------------------------
+bootstrap.memory_lock: true
+
+# ---------------------------------- Network -----------------------------------
+network.host: 0.0.0.0
+http.port: 9200
+
+# ---------------------------------- Security ----------------------------------
+# Security is auto-enabled in Elasticsearch 8.x
+xpack.security.enabled: true
+xpack.security.enrollment.enabled: true
+
+# Enable encryption for HTTP API client connections
+xpack.security.http.ssl:
+  enabled: true
+  keystore.path: certs/http.p12
+  truststore.path: certs/http.p12
+
+# Enable encryption for transport communications
+xpack.security.transport.ssl:
+  enabled: true
+  verification_mode: certificate
+  keystore.path: certs/transport.p12
+  truststore.path: certs/transport.p12
+
+# ---------------------------------- Indices -----------------------------------
+action.auto_create_index: ".monitoring*,.watches,.triggered_watches,.watcher-history*,.ml*,wazuh-*,suricata-*"
+EOF
+```
 
 
 
